@@ -1,10 +1,8 @@
-use num_bigint::{Sign, BigUint, BigInt};
+use num_bigint::{BigUint};
 use std::time::{Instant, Duration};
-use ibig::{modular::{Modulo, ModuloRing}, UBig, ubig};
-use crypto_bigint::{U256, U128};
-use crypto_bigint::{const_residue, impl_modulus, modular::constant_mod::{ResidueParams, Residue}, U64};
-
-impl_modulus!(M, U128, "cb800000000000000000000000000001");
+use ibig::{modular::{Modulo, ModuloRing}, UBig};
+use crypto_bigint::{U128};
+use crypto_bigint::{modular::runtime_mod::{DynResidue, DynResidueParams}};
 
 fn main() {
     let p = 1_u128 + 407_u128 * 2_u128.pow(119);
@@ -25,33 +23,31 @@ fn main() {
 
     for (i, v) in expected_bigint_mul.iter().enumerate() {
         assert_eq!(*v, expected_ibig_mul[i]);
-        // assert_eq!(*v, expected_crypto_mul[i]);
+        assert_eq!(*v, expected_crypto_mul[i]);
     }
 }
 
 fn test_crypto_bigint_mul(p_: u128, g_: u128) -> (Vec<u128>, Duration) {
     // let m = residue!()
-    let g = Residue::new(&U128::from_u128(g_));
-    let zero = U128::from_u128(0);
+    let g = U128::from_u128(g_);
+    let p = DynResidueParams::new(&U128::from_u128(p_));
     // start timing
     let now = Instant::now();
-    let mut muls: Vec<Residue<M, 2>> = Vec::new();
-    muls.push(g);
+    let mut muls: Vec<DynResidue<2>> = Vec::new();
+    muls.push(DynResidue::new(&g, p));
     for i in 1..10000000_usize {
-        muls.push(muls[i-1].mul(&g));
-        // muls.push(muls[i-1].saturating_mul(&g).add_mod(&zero, &p));
+        muls.push(muls[i-1].mul(&DynResidue::new(&g, p)));
     }
     // end timing
     let elapsed = now.elapsed();
-    // let out = muls.iter().map(|v| {
-    //     let limbs = v.to_limbs();
-    //     let mut out = 0_u128;
-    //     for (i, l) in limbs.iter().rev().enumerate() {
-    //         out += (u64::try_from(*l).unwrap() as u128) << (i*32);
-    //     }
-    //     out
-    // }).collect();
-    (Vec::new(), elapsed)
+    let out = muls.iter().map(|v| {
+        let mut o = 0_u128;
+        let words = v.retrieve().to_words();
+        o += u128::try_from(words[0]).unwrap();
+        o += u128::try_from(words[1]).unwrap() << 64;
+        o
+    }).collect();
+    (out, elapsed)
 }
 
 fn test_ibig_mul(p_: u128, g_: u128) -> (Vec<u128>, Duration) {
